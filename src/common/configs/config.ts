@@ -24,6 +24,11 @@ const config: Config = {
     expiresIn: '2m',
     refreshIn: '7d',
     bcryptSaltOrRound: 10,
+    // --- JWT Secrets from environment variables ---
+    // IMPORTANT: Set these environment variables with strong, random secrets!
+    // Use .env file for local development (ensure it's in .gitignore)
+    jwtAccessSecret: process.env.JWT_ACCESS_SECRET,
+    jwtRefreshSecret: process.env.JWT_REFRESH_SECRET,
   },
 };
 

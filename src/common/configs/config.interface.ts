@@ -33,4 +33,6 @@ export interface SecurityConfig {
   expiresIn: string;
   refreshIn: string;
   bcryptSaltOrRound: string | number;
+  jwtAccessSecret: string;
+  jwtRefreshSecret: string;
 }
