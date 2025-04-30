@@ -37,7 +37,7 @@ model Child {
   nickname     String   @db.VarChar(100) // VARCHAR(100) NOT NULL
   dateOfBirth  DateTime @map("date_of_birth") @db.Date // DATE NOT NULL
   gender       String?  @db.VarChar(20) // VARCHAR(20), CHECK约束建议使用枚举或应用层验证
-  allergyInfo  String?  @map("allergy_info") @db.Text // TEXT, 过敏信息
+  allergyInfo  String[] @default([]) @map("allergy_info") @db.Text // TEXT, 过敏信息
   moreInfo     String?  @map("more_info") @db.Text // TEXT, 更多信息
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6) // TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6) // TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL

@@ -19,7 +19,7 @@ Table children {
   nickname String [not null]
   dateOfBirth DateTime [not null]
   gender String
-  allergyInfo String
+  allergyInfo String[] [not null]
   moreInfo String
   createdAt DateTime [default: `now()`, not null]
   updatedAt DateTime [default: `now()`, not null]
