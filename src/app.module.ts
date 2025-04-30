@@ -10,6 +10,7 @@ import config from './common/configs/config';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { GqlConfigService } from './gql-config.service';
 import { LoggerModule } from './common/logger/logger.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -28,11 +29,11 @@ import { LoggerModule } from './common/logger/logger.module';
         ],
       },
     }),
-
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
       useClass: GqlConfigService,
     }),
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppResolver],
