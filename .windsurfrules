@@ -1,0 +1,69 @@
+# AI 育儿助手 - 后端开发规则 (供 Cascade 参考)
+
+**目标:** 确保 Cascade 在协助开发 AI 育儿助手后端时，遵循项目既定的技术规范、架构设计和开发流程。
+
+**核心原则:**
+
+1.  **遵循技术栈:**
+    *   主要语言: **TypeScript**。
+    *   核心框架: **NestJS** (遵循其模块化、依赖注入、装饰器等特性)。
+    *   数据库: **PostgreSQL**。
+    *   ORM: **Prisma** (使用 `schema.prisma` 定义模型，通过 `prisma migrate` 管理数据库变更，使用 `PrismaClient` 进行数据操作)。
+    *   认证: **JWT** (`@nestjs/jwt`, `@nestjs/passport`, `passport-jwt`)，密码哈希使用 **bcrypt** (根据 [package.json](cci:7://file:///Users/pipilu/Documents/ai/parenting-nestjs/package.json:0:0-0:0))。
+    *   数据验证/转换: **`class-validator`**, **`class-transformer`** (广泛应用于 DTO)。
+    *   API 文档: **Swagger** (`@nestjs/swagger`)。
+    *   测试: **Jest** (编写单元测试 `*.spec.ts` 和集成/E2E 测试 `*.e2e-spec.ts`)。
+    *   代码风格: **ESLint** 和 **Prettier** (遵循项目配置)。
+    *   日志: **`nestjs-pino`**。
+    *   缓存: **Redis** (通过 `@nestjs/cache-manager` 和 `cache-manager-redis-store`)。
+    *   AI 集成: **LangChain.js** (`@langchain/openai`, `@langchain/core` 等)，使用 LCEL 构建链。
+
+2.  **遵循架构设计 (模块化单体):**
+    *   严格遵循 NestJS 的模块化设计，将功能划分到明确的模块中 (如 `AuthModule`, `UsersModule`, `ChildrenModule`, `RecordsModule`, `AIModule`, `ChatModule`, `LangChainModule`, `CommonModule` 等)。
+    *   遵循 Controller -> Service -> Repository (通过 Prisma Client) 的分层模式。
+    *   使用 DTO (Data Transfer Objects) 在 Controller 层进行数据验证和转换。
+    *   合理使用 Guards, Pipes, Filters, Interceptors 处理横切关注点 (认证、验证、异常处理、日志记录、限流等)。
+
+3.  **数据库与 Prisma:**
+    *   所有数据库模型变更必须通过修改 `schema.prisma` 文件完成。
+    *   使用 `npx prisma migrate dev` 在开发环境应用和生成迁移文件。
+    *   使用 `npx prisma generate` 更新 Prisma Client 类型。
+    *   在 Service 层通过注入的 `PrismaService` (或特定 Repository) 与数据库交互。
+    *   特别注意 `Child` 模型中的 `allergy_info` 字段，设计文档和开发计划强调其重要性，应存储结构化数据 (如 Prisma 的 `Json` 类型或 `String[]`) 以便精确处理。
+    *   注意 `Record` 模型中的 `details` 字段，使用 `Json` 类型存储灵活的记录细节。
+
+4.  **API 设计:**
+    *   遵循 RESTful 风格。
+    *   使用 `@nestjs/swagger` 为所有 API 端点生成清晰的文档。
+    *   Controller 方法的输入应使用 DTO 并通过 `ValidationPipe` 进行验证。
+    *   需要认证的接口必须应用 `AuthGuard('jwt')`。
+
+5.  **AI 集成 (LangChain.js):**
+    *   AI 相关逻辑应封装在 `AIModule` 或相关模块 (`LangChainModule`, `ChatModule`) 中。
+    *   遵循设计文档中的 AI 链构建思路 (LCEL)：上下文构建 -> Prompt -> LLM 调用 -> 安全检查。
+    *   **重点关注 `SafetyChecker` 的实现，特别是过敏信息 (`allergy_info`) 的处理。必须基于从数据库获取的结构化过敏信息对 LLM 的回复进行严格检查和过滤。**
+    *   同时需要检查潜在的医疗建议，并附加免责声明。
+    *   聊天记录 (`ChatHistory`) 需要存储用户消息、最终 AI 回复、原始 AI 回复、上下文摘要、触发的安全标志和用户反馈。
+
+6.  **安全性:**
+    *   密码绝不能明文存储，必须使用 bcrypt 哈希。
+    *   所有外部输入必须通过 DTO 和 `ValidationPipe` 进行严格验证。
+    *   使用 `helmet` 等中间件增强安全性。
+    *   配置并应用速率限制 (`ThrottlerGuard`) 防止滥用。
+    *   注意日志脱敏，避免记录敏感信息 (如密码、完整的 Token)。
+    *   严格处理个人身份信息 (PII) 和潜在的受保护健康信息 (PHI)，特别是儿童相关数据和 `allergy_info`。
+
+7.  **测试:**
+    *   为 Service 层编写单元测试，Mock 依赖项 (如 Prisma Client, LLM 调用)。
+    *   为 Controller 层和主要流程编写集成测试和 E2E 测试。
+    *   确保测试覆盖核心业务逻辑、边界条件和错误处理。
+
+8.  **开发流程与协作:**
+    *   遵循开发计划（`后端开发计划.md`）中定义的阶段和任务。
+    *   代码变更应通过 Git 进行版本控制。
+    *   优先完成核心功能模块，再进行 AI 集成和跨领域关注点的完善。
+    *   与我（Cascade）协作时，请明确指出需要修改的文件和具体任务。我会基于这些规则提供代码建议、实现功能或进行调试。
+    *   所有与用户的交互，请使用**中文**。
+
+9.  **脚本使用:**
+    *   熟悉并使用 [package.json](cci:7://file:///Users/pipilu/Documents/ai/parenting-nestjs/package.json:0:0-0:0) 中定义的脚本，如 `build`, `start:dev`, `lint`, `test`, `migrate:dev`, `prisma:generate` 等。

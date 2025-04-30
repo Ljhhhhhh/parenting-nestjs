@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { PrismaClientExceptionFilter } from 'nestjs-prisma';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import type {
   CorsConfig,
@@ -11,7 +12,10 @@ import type {
 } from './common/configs/config.interface';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+  // Use pino logger
+  app.useLogger(app.get(Logger));
 
   // Validation
   app.useGlobalPipes(new ValidationPipe());
@@ -46,5 +50,6 @@ async function bootstrap() {
   }
 
   await app.listen(process.env.PORT || nestConfig.port || 3000);
+  app.get(Logger).log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();

@@ -13,30 +13,82 @@ generator dbml {
   output = "./dbml"
 }
 
+// 用户表 (Users)
 model User {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  email     String   @unique
-  password  String
-  firstname String?
-  lastname  String?
-  posts     Post[]
-  role      Role
+  id            Int      @id @default(autoincrement()) // SERIAL PRIMARY KEY
+  email         String   @unique @db.VarChar(255) // VARCHAR(255) UNIQUE NOT NULL
+  hashedPassword String   @map("hashed_password") @db.VarChar(255) // VARCHAR(255) NOT NULL
+  isActive      Boolean  @default(true) @map("is_active") // BOOLEAN DEFAULT TRUE NOT NULL
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6) // TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6) // TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+
+  children   Child[] // 一个用户可以有多个孩子
+  chatHistory ChatHistory[] // 一个用户可以有多条聊天记录
+  // notifications Notification[] // 未来：通知关系
+  // savedContent Content[] // 未来：内容收藏关系
+
+  @@map("users") // 映射到数据库表名 'users'
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  published Boolean
-  title     String
-  content   String?
-  author    User?    @relation(fields: [authorId], references: [id])
-  authorId  String?
+// 儿童信息表 (Children)
+model Child {
+  id           Int      @id @default(autoincrement()) // SERIAL PRIMARY KEY
+  userId       Int      @map("user_id") // INTEGER NOT NULL
+  nickname     String   @db.VarChar(100) // VARCHAR(100) NOT NULL
+  dateOfBirth  DateTime @map("date_of_birth") @db.Date // DATE NOT NULL
+  gender       String?  @db.VarChar(20) // VARCHAR(20), CHECK约束建议使用枚举或应用层验证
+  allergyInfo  String?  @map("allergy_info") @db.Text // TEXT, 过敏信息
+  moreInfo     String?  @map("more_info") @db.Text // TEXT, 更多信息
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6) // TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6) // TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade) // 外键关联用户，级联删除
+  records   Record[] // 一个孩子可以有多条记录
+  chatHistory ChatHistory[] // 一个孩子可以有多条聊天记录
+  // notifications Notification[] // 未来：通知关系
+  // relevantContent Content[] // 未来：内容相关关系
+
+  @@index([userId]) // 外键索引 (children.user_id)
+  @@map("children") // 映射到数据库表名 'children'
 }
 
-enum Role {
-  ADMIN
-  USER
+// 日常记录表 (Records)
+model Record {
+  id             BigInt   @id @default(autoincrement()) // BIGSERIAL PRIMARY KEY
+  childId        Int      @map("child_id") // INTEGER NOT NULL
+  recordType     String   @map("record_type") @db.VarChar(50) // VARCHAR(50) NOT NULL, 如 'Sleep', 'Feeding', 'Diaper', 'Note' 等
+  details        Json?    // JSONB, 存储不同类型记录细节
+  recordTimestamp DateTime @map("record_timestamp") @db.Timestamptz(6) // TIMESTAMPTZ NOT NULL, 记录发生时间
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6) // TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL, 记录创建时间
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade) // 外键关联儿童，级联删除
+
+  @@index([childId, recordTimestamp]) // 复合索引 (records.child_id, records.record_timestamp)
+  @@index([recordTimestamp])          // 记录发生时间戳索引
+  @@index([recordType])               // 记录类型索引 (如果按类型查询频繁)
+  // @@index([details], type: Gin)    // GIN索引 for JSONB, 需要通过 Prisma migration raw SQL 添加
+  // 例如，在 migration 文件中添加: CREATE INDEX "idx_records_details_gin" ON "records" USING GIN ("details");
+  @@map("records") // 映射到数据库表名 'records'
+}
+
+// 聊天记录表 (ChatHistory)
+model ChatHistory {
+  id              BigInt    @id @default(autoincrement()) // BIGSERIAL PRIMARY KEY
+  userId          Int       @map("user_id") // INTEGER NOT NULL
+  childId         Int?      @map("child_id") // INTEGER REFERENCES children(id), 可能与特定儿童相关
+  userMessage     String    @map("user_message") @db.Text // TEXT NOT NULL
+  aiResponse      String?   @map("ai_response") @db.Text // TEXT, 最终返回给用户的响应
+  rawAiResponse   String?   @map("raw_ai_response") @db.Text // TEXT, 存储原始AI响应
+  contextSummary  String?   @map("context_summary") @db.Text // TEXT, 本次交互使用的上下文信息摘要
+  safetyFlags     String?   @map("safety_flags") @db.VarChar(255) // VARCHAR(255), 记录触发的安全规则
+  feedback        Int?      // SMALLINT CHECK (feedback IN (1, -1)), 用户反馈, CHECK约束建议应用层验证
+  requestTimestamp DateTime @default(now()) @map("request_timestamp") @db.Timestamptz(6) // TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+  responseTimestamp DateTime? @map("response_timestamp") @db.Timestamptz(6) // TIMESTAMPTZ
+
+  user  User   @relation(fields: [userId], references: [id]) // 外键关联用户
+  child Child? @relation(fields: [childId], references: [id]) // 外键关联儿童 (可选)
+
+  @@index([userId]) // 外键索引 (chat_history.user_id)
+  @@index([childId, requestTimestamp]) // 复合索引 (chat_history.child_id, chat_history.request_timestamp)
+  @@map("chat_history") // 映射到数据库表名 'chat_history'
 }
