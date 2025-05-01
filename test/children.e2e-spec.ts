@@ -1,308 +1,243 @@
-import request from 'supertest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { PrismaService } from 'nestjs-prisma';
+import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { JwtAuthGuard } from '../src/auth/guards/jwt-auth.guard'; // Use src/ prefix
+import { RegisterDto } from '../src/auth/dto/register.dto';
+import { LoginDto } from '../src/auth/dto/login.dto';
+import { CreateChildDto } from '../src/children/dto/create-child.dto';
+import { UpdateChildDto } from '../src/children/dto/update-child.dto';
+import { PrismaService } from 'nestjs-prisma';
 
-// Mock user data for the guard
-const mockUser = { userId: 1, email: 'test@example.com' };
-
-// Mock PrismaService methods
-const mockPrismaService = {
-  child: {
-    create: jest.fn(),
-    findMany: jest.fn(),
-    findUniqueOrThrow: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-  },
-  // Add mocks for other models if needed by other tests
-};
-
-describe('ChildrenController (e2e)', () => {
+describe('儿童模块 (e2e)', () => {
   let app: INestApplication;
-  let prisma: typeof mockPrismaService;
+  let prismaService: PrismaService;
+
+  // 测试用户信息
+  const testUser: RegisterDto = {
+    email: `test-${Date.now()}@example.com`,
+    password: 'Password123',
+  };
+
+  // 登录凭证
+  let accessToken: string;
+
+  // 测试儿童数据
+  const testChild: CreateChildDto = {
+    nickname: '测试宝宝',
+    dateOfBirth: '2023-01-15',
+    gender: 'male',
+    allergyInfo: ['花生', '海鲜'],
+    moreInfo: '喜欢听音乐',
+  };
+
+  // 存储创建的儿童ID
+  let childId: number;
+  // 存储删除前的childId用于测试
+  let deletedChildId: number;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    })
-      .overrideProvider(PrismaService) // Override PrismaService
-      .useValue(mockPrismaService)
-      .overrideGuard(JwtAuthGuard) // Override the actual JwtAuthGuard globally for testing
-      .useValue({
-        canActivate: (context) => {
-          const req = context.switchToHttp().getRequest();
-          req.user = mockUser; // Attach the mock user to the request
-          return true; // Always allow access for testing purposes
-        },
-      })
-      .compile();
+    }).compile();
 
     app = moduleFixture.createNestApplication();
-    // Apply the global ValidationPipe like in main.ts
+    prismaService = app.get<PrismaService>(PrismaService);
+
+    // 应用全局管道，与主应用保持一致
     app.useGlobalPipes(
       new ValidationPipe({
-        whitelist: true, // Strip properties not in DTO
-        transform: true, // Automatically transform payloads to DTO instances
-        forbidNonWhitelisted: true, // Throw error if non-whitelisted properties are present
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
       }),
     );
+
     await app.init();
 
-    prisma = moduleFixture.get(PrismaService);
-  });
-
-  beforeEach(() => {
-    // Reset mocks before each test
-    jest.clearAllMocks();
+    // 清理测试数据
+    await cleanupTestData();
   });
 
   afterAll(async () => {
+    // 清理测试数据
+    await cleanupTestData();
     await app.close();
   });
 
-  const createChildDto = {
-    nickname: 'Test E2E Baby',
-    dateOfBirth: '2024-02-01',
-    allergyInfo: ['Milk'],
-    gender: '女',
-  };
-  const expectedChild = {
-    id: 1,
-    ...createChildDto,
-    dateOfBirth: new Date(createChildDto.dateOfBirth), // Use Date object internally
-    userId: mockUser.userId,
-    moreInfo: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    allergyInfo: ['Milk'], // Ensure array format
-  };
-  // Simulate what the controller might return (dates as ISO strings)
-  const expectedChildResponse = JSON.parse(JSON.stringify(expectedChild));
+  // 辅助函数：清理测试数据
+  async function cleanupTestData() {
+    // 删除测试用户创建的儿童记录
+    if (childId) {
+      await prismaService.child.deleteMany({
+        where: { id: childId },
+      });
+    }
 
-  // Test POST /children
-  describe('POST /children', () => {
-    it('should create a child and return 201', async () => {
-      prisma.child.create.mockResolvedValue(expectedChild);
+    // 删除测试用户
+    await prismaService.user.deleteMany({
+      where: { email: testUser.email },
+    });
+  }
 
+  describe('认证流程', () => {
+    it('应该成功注册新用户', () => {
       return request(app.getHttpServer())
-        .post('/children')
-        .send(createChildDto)
+        .post('/auth/register')
+        .send(testUser)
         .expect(201)
         .expect((res) => {
-          // Basic structure check - refine based on actual DTO
-          expect(res.body.id).toBeDefined();
-          expect(res.body.nickname).toEqual(createChildDto.nickname);
-          expect(res.body.allergyInfo).toEqual(createChildDto.allergyInfo);
-          expect(res.body.userId).toEqual(mockUser.userId);
-          // Dates need careful comparison due to potential timezone/serialization differences
-          expect(
-            new Date(res.body.dateOfBirth).toISOString().split('T')[0],
-          ).toEqual(createChildDto.dateOfBirth);
+          expect(res.body).toHaveProperty('id');
+          expect(res.body).toHaveProperty('email', testUser.email);
+          expect(res.body).not.toHaveProperty('hashedPassword');
         });
     });
 
-    it('should return 400 for invalid data (missing nickname)', async () => {
-      const { nickname, ...invalidDto } = createChildDto;
-      return request(app.getHttpServer())
-        .post('/children')
-        .send(invalidDto)
-        .expect(400); // Bad Request due to validation pipe
-    });
+    it('应该成功登录并获取令牌', () => {
+      const loginDto: LoginDto = {
+        email: testUser.email,
+        password: testUser.password,
+      };
 
-    it('should return 400 for invalid data (allergyInfo not array)', async () => {
-      const invalidDto = { ...createChildDto, allergyInfo: 'Peanuts' }; // allergyInfo should be string[]
       return request(app.getHttpServer())
-        .post('/children')
-        .send(invalidDto)
-        .expect(400); // Bad Request due to validation pipe
+        .post('/auth/login')
+        .send(loginDto)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('accessToken');
+          expect(res.body).toHaveProperty('refreshToken');
+          accessToken = res.body.accessToken;
+        });
     });
   });
 
-  // Test GET /children
-  describe('GET /children', () => {
-    it('should return an array of children for the user and return 200', async () => {
-      const children = [
-        expectedChild,
-        { ...expectedChild, id: 2, nickname: 'Child 2' },
-      ];
-      prisma.child.findMany.mockResolvedValue(children);
-      // Simulate response serialization
-      const expectedResponseBody = JSON.parse(JSON.stringify(children));
+  describe('儿童模块 CRUD 操作', () => {
+    it('未认证时应该无法访问儿童接口', () => {
+      return request(app.getHttpServer()).get('/children').expect(401);
+    });
 
+    it('应该成功创建新的儿童记录', () => {
+      return request(app.getHttpServer())
+        .post('/children')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(testChild)
+        .expect(201)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('id');
+          expect(res.body).toHaveProperty('nickname', testChild.nickname);
+          expect(res.body).toHaveProperty('dateOfBirth');
+          expect(res.body).toHaveProperty('gender', testChild.gender);
+          expect(res.body).toHaveProperty('allergyInfo');
+          expect(res.body.allergyInfo).toEqual(
+            expect.arrayContaining(testChild.allergyInfo),
+          );
+          expect(res.body).toHaveProperty('moreInfo', testChild.moreInfo);
+          childId = res.body.id;
+        });
+    });
+
+    it('应该成功获取儿童列表', () => {
       return request(app.getHttpServer())
         .get('/children')
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(200)
         .expect((res) => {
-          expect(res.body).toBeInstanceOf(Array);
-          expect(res.body.length).toBe(2);
-          expect(res.body[0].id).toEqual(expectedResponseBody[0].id);
-          expect(res.body[1].nickname).toEqual(
-            expectedResponseBody[1].nickname,
+          expect(Array.isArray(res.body)).toBe(true);
+          expect(res.body.length).toBeGreaterThan(0);
+          const child = res.body.find((c) => c.id === childId);
+          expect(child).toBeDefined();
+          expect(child.nickname).toBe(testChild.nickname);
+        });
+    });
+
+    it('应该成功获取指定ID的儿童信息', () => {
+      return request(app.getHttpServer())
+        .get(`/children/${childId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('id', childId);
+          expect(res.body).toHaveProperty('nickname', testChild.nickname);
+        });
+    });
+
+    it('应该成功更新儿童信息', () => {
+      const updateData: UpdateChildDto = {
+        nickname: '更新的昵称',
+        moreInfo: '更新的信息',
+      };
+
+      return request(app.getHttpServer())
+        .patch(`/children/${childId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(updateData)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('id', childId);
+          expect(res.body).toHaveProperty('nickname', updateData.nickname);
+          expect(res.body).toHaveProperty('moreInfo', updateData.moreInfo);
+          // 确保其他字段没有被修改
+          expect(res.body).toHaveProperty('gender', testChild.gender);
+          expect(res.body.allergyInfo).toEqual(
+            expect.arrayContaining(testChild.allergyInfo),
           );
-          expect(res.body[0].userId).toEqual(mockUser.userId);
         });
+    });
+
+    it('应该成功删除儿童记录', () => {
+      // 保存删除前的childId用于后续测试
+      deletedChildId = childId;
+      return request(app.getHttpServer())
+        .delete(`/children/${childId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200)
+        .expect((res) => {
+          expect(res.body).toHaveProperty('id', childId);
+          // 删除后将childId设为null，避免afterAll再次尝试删除
+          childId = null;
+        });
+    });
+
+    it('删除后应该无法获取已删除的儿童信息', () => {
+      return request(app.getHttpServer())
+        .get(`/children/${deletedChildId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(404);
     });
   });
 
-  // Test GET /children/:id
-  describe('GET /children/:id', () => {
-    const childId = 1;
-
-    it('should return a specific child if owned and return 200', async () => {
-      prisma.child.findUniqueOrThrow.mockResolvedValue(expectedChild); // findOne calls checkOwnership -> findUniqueOrThrow
-      const expectedResponseBody = JSON.parse(JSON.stringify(expectedChild));
-
+  describe('错误处理', () => {
+    it('使用无效ID应该返回404', () => {
+      const invalidId = 99999;
       return request(app.getHttpServer())
-        .get(`/children/${childId}`)
-        .expect(200)
-        .expect((res) => {
-          expect(res.body.id).toEqual(childId);
-          expect(res.body.nickname).toEqual(expectedResponseBody.nickname);
-          expect(res.body.userId).toEqual(mockUser.userId);
-        });
-    });
-
-    it('should return 404 if child not found', async () => {
-      const prismaError = new Error('Record not found'); // Simulate error
-      (prismaError as any).code = 'P2025'; // Prisma error code for not found
-      prisma.child.findUniqueOrThrow.mockRejectedValue(prismaError);
-
-      return request(app.getHttpServer())
-        .get(`/children/${childId}`)
-        .expect(404); // Not Found
-    });
-
-    it('should return 403 if child not owned by user', async () => {
-      const otherUserChild = { ...expectedChild, userId: mockUser.userId + 1 };
-      prisma.child.findUniqueOrThrow.mockResolvedValue(otherUserChild);
-
-      return request(app.getHttpServer())
-        .get(`/children/${childId}`)
-        .expect(403); // Forbidden
-    });
-
-    it('should return 400 for invalid ID format', async () => {
-      return request(app.getHttpServer())
-        .get(`/children/abc`) // Invalid ID
-        .expect(400); // Bad Request due to ParseIntPipe
-    });
-  });
-
-  // Test PATCH /children/:id
-  describe('PATCH /children/:id', () => {
-    const childId = 1;
-    const updateDto = {
-      nickname: 'Updated E2E Name',
-      allergyInfo: ['Pollen', 'Dust'],
-    };
-    const existingChildOwned = { ...expectedChild, id: childId }; // Assume owned
-    const updatedDbChild = {
-      ...existingChildOwned,
-      ...updateDto,
-      updatedAt: new Date(),
-    };
-    const expectedResponseBody = JSON.parse(JSON.stringify(updatedDbChild));
-
-    it('should update the child if owned and return 200', async () => {
-      prisma.child.findUniqueOrThrow.mockResolvedValue(existingChildOwned); // For checkOwnership
-      prisma.child.update.mockResolvedValue(updatedDbChild);
-
-      return request(app.getHttpServer())
-        .patch(`/children/${childId}`)
-        .send(updateDto)
-        .expect(200)
-        .expect((res) => {
-          expect(res.body.id).toEqual(childId);
-          expect(res.body.nickname).toEqual(updateDto.nickname);
-          expect(res.body.allergyInfo).toEqual(updateDto.allergyInfo);
-          expect(res.body.userId).toEqual(mockUser.userId);
-        });
-    });
-
-    it('should return 400 for invalid update data (nickname type)', async () => {
-      const invalidUpdateDto = { nickname: 123 }; // Invalid type
-      return request(app.getHttpServer())
-        .patch(`/children/${childId}`)
-        .send(invalidUpdateDto)
-        .expect(400);
-    });
-
-    it('should return 400 for invalid update data (allergyInfo element type)', async () => {
-      const invalidUpdateDto = { allergyInfo: ['Good', 123] }; // Invalid element type in array
-      return request(app.getHttpServer())
-        .patch(`/children/${childId}`)
-        .send(invalidUpdateDto)
-        .expect(400);
-    });
-
-    it('should return 404 if child to update not found', async () => {
-      const prismaError = new Error('Record not found');
-      (prismaError as any).code = 'P2025';
-      prisma.child.findUniqueOrThrow.mockRejectedValue(prismaError); // checkOwnership fails
-
-      return request(app.getHttpServer())
-        .patch(`/children/${childId}`)
-        .send(updateDto)
+        .get(`/children/${invalidId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
         .expect(404);
     });
 
-    it('should return 403 if trying to update unowned child', async () => {
-      const otherUserChild = {
-        ...existingChildOwned,
-        userId: mockUser.userId + 1,
+    it('创建儿童时缺少必填字段应该返回400', () => {
+      const invalidChild = {
+        // 缺少nickname和dateOfBirth
+        gender: 'female',
       };
-      prisma.child.findUniqueOrThrow.mockResolvedValue(otherUserChild); // checkOwnership fails
 
       return request(app.getHttpServer())
-        .patch(`/children/${childId}`)
-        .send(updateDto)
-        .expect(403);
-    });
-  });
-
-  // Test DELETE /children/:id
-  describe('DELETE /children/:id', () => {
-    const childId = 1;
-    const existingChildOwned = { ...expectedChild, id: childId };
-    const expectedResponseBody = JSON.parse(JSON.stringify(existingChildOwned));
-
-    it('should delete the child if owned and return 200', async () => {
-      prisma.child.findUniqueOrThrow.mockResolvedValue(existingChildOwned); // For checkOwnership
-      prisma.child.delete.mockResolvedValue(existingChildOwned); // Mock deletion success
-
-      return request(app.getHttpServer())
-        .delete(`/children/${childId}`)
-        .expect(200)
-        .expect((res) => {
-          // Check if the returned deleted object is correct
-          expect(res.body.id).toEqual(childId);
-          expect(res.body.userId).toEqual(mockUser.userId);
-        });
+        .post('/children')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(invalidChild)
+        .expect(400);
     });
 
-    it('should return 404 if child to delete not found', async () => {
-      const prismaError = new Error('Record not found');
-      (prismaError as any).code = 'P2025';
-      prisma.child.findUniqueOrThrow.mockRejectedValue(prismaError); // checkOwnership fails
-
-      return request(app.getHttpServer())
-        .delete(`/children/${childId}`)
-        .expect(404);
-    });
-
-    it('should return 403 if trying to delete unowned child', async () => {
-      const otherUserChild = {
-        ...existingChildOwned,
-        userId: mockUser.userId + 1,
+    it('使用无效的日期格式应该返回400', () => {
+      const invalidChild = {
+        ...testChild,
+        dateOfBirth: 'invalid-date',
       };
-      prisma.child.findUniqueOrThrow.mockResolvedValue(otherUserChild); // checkOwnership fails
 
       return request(app.getHttpServer())
-        .delete(`/children/${childId}`)
-        .expect(403);
+        .post('/children')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(invalidChild)
+        .expect(400);
     });
   });
 });

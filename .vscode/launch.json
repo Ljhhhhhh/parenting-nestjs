@@ -1,0 +1,19 @@
+// .vscode/launch.json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach NestJS (start:debug)",
+      "port": 9229,
+      "restart": true,
+      "sourceMaps": true, // <--- 确保这个是 true
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js" // <--- 添加这个，指向编译后的 JS 文件
+      ],
+      "skipFiles": ["<node_internals>/**"]
+    }
+    // ... 其他配置 ...
+  ]
+}

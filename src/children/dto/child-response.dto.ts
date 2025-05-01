@@ -4,9 +4,6 @@ export class ChildResponseDto {
   @ApiProperty({ description: '儿童的唯一标识符', example: 1 })
   id: number;
 
-  @ApiProperty({ description: '儿童所属用户的 ID', example: 101 })
-  userId: number;
-
   @ApiProperty({ description: '儿童昵称', example: '宝宝' })
   nickname: string;
 

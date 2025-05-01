@@ -37,7 +37,7 @@ async function bootstrap() {
     const options = new DocumentBuilder()
       .setTitle(swaggerConfig.title || 'Nestjs')
       .setDescription(swaggerConfig.description || 'The nestjs API description')
-      .setVersion(swaggerConfig.version || '1.0')
+      .setVersion(swaggerConfig.version || '2.0')
       .build();
     const document = SwaggerModule.createDocument(app, options);
 

@@ -11,7 +11,7 @@ const config: Config = {
     enabled: true,
     title: 'Nestjs FTW',
     description: 'The nestjs API description',
-    version: '1.5',
+    version: '2.0',
     path: 'api',
   },
   graphql: {

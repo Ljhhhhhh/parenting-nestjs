@@ -47,7 +47,7 @@ export class ChildrenController {
     @Req() req,
   ): Promise<ChildResponseDto> {
     // The user object is attached to the request by JwtAuthGuard after successful validation
-    const userId = req.user.userId; // Assuming JwtStrategy returns { userId: number, email: string, ... }
+    const userId = req.user.id; // Assuming JwtStrategy returns { userId: number, email: string, ... }
     if (!userId) {
       // This should technically not happen if the guard is working correctly
       throw new UnauthorizedException('无法获取用户信息');
@@ -65,7 +65,7 @@ export class ChildrenController {
   })
   @ApiResponse({ status: 401, description: '未授权' })
   async findAll(@Req() req): Promise<ChildResponseDto[]> {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     if (!userId) {
       throw new UnauthorizedException('无法获取用户信息');
     }
@@ -87,7 +87,7 @@ export class ChildrenController {
     @Param('id', ParseIntPipe) id: number,
     @Req() req,
   ): Promise<ChildResponseDto> {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     if (!userId) {
       throw new UnauthorizedException('无法获取用户信息');
     }
@@ -111,7 +111,7 @@ export class ChildrenController {
     @Body() updateChildDto: UpdateChildDto,
     @Req() req,
   ): Promise<ChildResponseDto> {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     if (!userId) {
       throw new UnauthorizedException('无法获取用户信息');
     }
@@ -135,7 +135,7 @@ export class ChildrenController {
     @Param('id', ParseIntPipe) id: number,
     @Req() req,
   ): Promise<ChildResponseDto> {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     if (!userId) {
       throw new UnauthorizedException('无法获取用户信息');
     }
