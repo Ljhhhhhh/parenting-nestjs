@@ -6,7 +6,7 @@ import {
 import { PrismaService } from 'nestjs-prisma';
 import { CreateChildDto } from './dto/create-child.dto';
 import { UpdateChildDto } from './dto/update-child.dto';
-import { Child, User } from '@prisma/client'; // Import Prisma models
+import { Child } from '@prisma/client';
 
 @Injectable()
 export class ChildrenService {

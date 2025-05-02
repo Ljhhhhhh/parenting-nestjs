@@ -4,7 +4,6 @@ import { PrismaService } from 'nestjs-prisma'; // 从库导入
 import { CreateChildDto } from './dto/create-child.dto';
 import { UpdateChildDto } from './dto/update-child.dto';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
-import { Prisma } from '@prisma/client'; // Import Prisma types if needed for errors
 
 // Mock PrismaService
 const mockPrismaService = {
@@ -229,7 +228,7 @@ describe('ChildrenService', () => {
       prisma.child.findUnique.mockResolvedValue(existingChild); // checkOwnership passes
       prisma.child.update.mockResolvedValue(updatedChildWithDate);
 
-      const result = await service.update(childId, userId, updateDtoWithDate);
+      await service.update(childId, userId, updateDtoWithDate);
 
       expect(prisma.child.update).toHaveBeenCalledWith({
         where: { id: childId },

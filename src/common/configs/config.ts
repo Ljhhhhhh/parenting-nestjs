@@ -21,8 +21,8 @@ const config: Config = {
     sortSchema: true,
   },
   security: {
-    expiresIn: '2m',
-    refreshIn: '7d',
+    expiresIn: '7d',
+    refreshIn: '30d',
     bcryptSaltOrRound: 10,
     // --- JWT Secrets from environment variables ---
     // IMPORTANT: Set these environment variables with strong, random secrets!

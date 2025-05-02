@@ -13,6 +13,7 @@ import { LoggerModule } from './common/logger/logger.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { ChildrenModule } from './children/children.module';
+import { RecordsModule } from './records/records.module';
 import { APP_PIPE, APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
@@ -40,6 +41,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     HealthModule,
     AuthModule,
     ChildrenModule,
+    RecordsModule,
   ],
   controllers: [AppController],
   providers: [
