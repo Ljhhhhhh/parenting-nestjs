@@ -4,6 +4,7 @@ export interface Config {
   swagger: SwaggerConfig;
   graphql: GraphqlConfig;
   security: SecurityConfig;
+  siliconFlow: SiliconFlowConfig;
 }
 
 export interface NestConfig {
@@ -35,4 +36,13 @@ export interface SecurityConfig {
   bcryptSaltOrRound: string | number;
   jwtAccessSecret: string;
   jwtRefreshSecret: string;
+}
+
+export interface SiliconFlowConfig {
+  apiKey: string;
+  apiEndpoint: string;
+  model: string;
+  temperature: number;
+  maxTokens?: number;
+  timeout?: number;
 }

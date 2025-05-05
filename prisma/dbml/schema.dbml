@@ -45,7 +45,7 @@ Table chat_history {
   userMessage String [not null]
   aiResponse String
   rawAiResponse String
-  contextSummary String
+  contextSummary String[] [not null]
   safetyFlags String
   feedback Int
   requestTimestamp DateTime [default: `now()`, not null]

@@ -173,6 +173,7 @@ describe('RecordsService', () => {
     it('应该成功创建喂食记录', async () => {
       // 模拟儿童所有权检查
       mockPrismaService.child.findUniqueOrThrow.mockResolvedValue(dbChild);
+      dbRecord.recordType = RecordType.FEEDING;
       // 模拟记录创建
       const feedingDbRecord: FeedingDetailsDto = {
         ...dbRecord,

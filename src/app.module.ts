@@ -14,6 +14,9 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { ChildrenModule } from './children/children.module';
 import { RecordsModule } from './records/records.module';
+import { AIModule } from './ai/ai.module';
+import { ChatModule } from './chat/chat.module';
+import { LangchainModule } from './langchain/langchain.module';
 import { APP_PIPE, APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
@@ -42,6 +45,9 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     AuthModule,
     ChildrenModule,
     RecordsModule,
+    LangchainModule,
+    AIModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [
