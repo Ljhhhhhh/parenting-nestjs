@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'nestjs-prisma';
+import { ChatHistoryService } from '../common/services/chat-history.service';
 import { AIService } from '../ai/ai.service';
 
 /**
@@ -13,11 +14,12 @@ export class ChatService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly chatHistoryService: ChatHistoryService,
     private readonly aiService: AIService,
   ) {}
 
   /**
-   * 创建新的聊天记录
+   * 创建新的聊天记录 (此方法现在不再由 ChatService.chat 直接调用，因为 AIService 会处理)
    * @param userId 用户ID
    * @param childId 可选的孩子ID
    * @param userMessage 用户消息
@@ -35,19 +37,18 @@ export class ChatService {
     contextSummary: string[],
     safetyFlags: string,
   ) {
-    this.logger.log(`为用户 ${userId} 创建聊天历史记录`);
-
-    return this.prisma.chatHistory.create({
-      data: {
-        userId,
-        childId,
-        userMessage,
-        aiResponse,
-        rawAiResponse,
-        contextSummary,
-        safetyFlags,
-      },
-    });
+    this.logger.log(
+      `为用户 ${userId} 创建聊天历史记录 (通过 ChatService.createChatHistory)`,
+    );
+    return this.chatHistoryService.createChatHistory(
+      userId,
+      childId,
+      userMessage,
+      aiResponse,
+      rawAiResponse,
+      contextSummary,
+      safetyFlags,
+    );
   }
 
   /**
@@ -65,31 +66,20 @@ export class ChatService {
   ) {
     this.logger.log(`获取用户 ${userId} 的聊天历史`);
 
-    return this.prisma.chatHistory.findMany({
-      where: {
-        userId,
-        ...(childId ? { childId } : {}),
-      },
-      orderBy: {
-        requestTimestamp: 'desc',
-      },
-      take: limit,
-      skip: offset,
-      select: {
-        id: true,
-        userMessage: true,
-        aiResponse: true,
-        safetyFlags: true,
-        feedback: true,
-        requestTimestamp: true,
-        child: {
-          select: {
-            id: true,
-            nickname: true,
-          },
-        },
-      },
-    });
+    const chats = await this.chatHistoryService.getUserChats(
+      userId,
+      limit,
+      offset,
+    );
+
+    return chats.map((chat) => ({
+      id: chat.id,
+      userMessage: chat.userMessage,
+      aiResponse: chat.aiResponse,
+      safetyFlags: chat.safetyFlags,
+      feedback: chat.feedback,
+      requestTimestamp: chat.requestTimestamp,
+    }));
   }
 
   /**
@@ -102,7 +92,6 @@ export class ChatService {
   async getChildChats(userId: number, childId: number, limit = 10, offset = 0) {
     this.logger.log(`获取用户 ${userId} 的孩子 ${childId} 的聊天历史`);
 
-    // 验证孩子属于该用户
     const child = await this.prisma.child.findUnique({
       where: { id: childId },
       select: { userId: true },
@@ -112,34 +101,21 @@ export class ChatService {
       throw new Error('无权限查看此孩子的聊天历史');
     }
 
-    return this.prisma.chatHistory.findMany({
-      where: {
-        userId,
-        childId,
-      },
-      orderBy: {
-        requestTimestamp: 'desc',
-      },
-      take: limit,
-      skip: offset,
-      select: {
-        id: true,
-        userMessage: true,
-        aiResponse: true,
-        safetyFlags: true,
-        feedback: true,
-        requestTimestamp: true,
-        responseTimestamp: true,
-        child: {
-          select: {
-            id: true,
-            nickname: true,
-            gender: true,
-            dateOfBirth: true,
-          },
-        },
-      },
-    });
+    const chats = await this.chatHistoryService.getChildChats(
+      childId,
+      limit,
+      offset,
+    );
+
+    return chats.map((chat) => ({
+      id: chat.id,
+      userMessage: chat.userMessage,
+      aiResponse: chat.aiResponse,
+      safetyFlags: chat.safetyFlags,
+      feedback: chat.feedback,
+      requestTimestamp: chat.requestTimestamp,
+      responseTimestamp: chat.responseTimestamp,
+    }));
   }
 
   /**
@@ -150,21 +126,7 @@ export class ChatService {
    */
   async provideFeedback(chatId: number, userId: number, feedback: number) {
     this.logger.log(`用户 ${userId} 为聊天 ${chatId} 提供反馈: ${feedback}`);
-
-    // 验证聊天记录属于该用户
-    const chat = await this.prisma.chatHistory.findUnique({
-      where: { id: chatId },
-      select: { userId: true },
-    });
-
-    if (!chat || chat.userId !== userId) {
-      throw new Error('无权限更新此聊天记录');
-    }
-
-    return this.prisma.chatHistory.update({
-      where: { id: chatId },
-      data: { feedback: feedback },
-    });
+    return this.chatHistoryService.saveFeedback(chatId, userId, feedback);
   }
 
   /**
@@ -178,20 +140,11 @@ export class ChatService {
       `用户 ${userId} 为聊天历史 ${chatHistoryId} 保存反馈: ${feedback}`,
     );
 
-    // 验证聊天记录属于该用户
-    const chat = await this.prisma.chatHistory.findUnique({
-      where: { id: chatHistoryId },
-      select: { userId: true },
-    });
-
-    if (!chat || chat.userId !== userId) {
-      throw new Error('无权限更新此聊天记录');
-    }
-
-    return this.prisma.chatHistory.update({
-      where: { id: chatHistoryId },
-      data: { feedback: feedback },
-    });
+    return this.chatHistoryService.saveFeedback(
+      chatHistoryId,
+      userId,
+      feedback,
+    );
   }
 
   /**
@@ -202,8 +155,13 @@ export class ChatService {
   async getSuggestions(userId: number, childId: number | null) {
     this.logger.log(`为用户 ${userId} 获取问题建议`);
 
-    // 调用AI服务获取问题建议
-    return this.aiService.getSuggestions(userId, childId);
+    return [
+      '孩子最近的饮食情况如何？',
+      '孩子的睡眠质量好吗？',
+      '孩子有什么新的技能或兴趣吗？',
+      '您最近遇到了什么育儿困难？',
+      '孩子的情绪管理有什么变化？',
+    ];
   }
 
   /**
@@ -213,8 +171,28 @@ export class ChatService {
    * @param message 用户消息
    */
   async chat(userId: number, childId: number | null, message: string) {
-    this.logger.log(`处理用户 ${userId} 的聊天请求`);
-    return this.aiService.chat(userId, childId, message);
+    this.logger.log(`处理用户 ${userId} 的聊天请求，消息: "${message}"`);
+
+    try {
+      const aiResult = await this.aiService.chat(userId, childId, message);
+
+      this.logger.log(
+        `AIService 返回结果: ID=${aiResult.id}, Response="${aiResult.response}", Flags=${aiResult.safetyFlags}`,
+      );
+
+      return {
+        id: aiResult.id.toString(),
+        message: aiResult.response,
+        safetyFlags: aiResult.safetyFlags,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      this.logger.error(
+        `ChatService.chat - 处理聊天请求失败: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 
   /**
@@ -226,22 +204,14 @@ export class ChatService {
   async findRecentByUserId(userId: number, childId: number | null, limit = 5) {
     this.logger.log(`获取用户 ${userId} 的最近 ${limit} 条聊天记录`);
 
-    return this.prisma.chatHistory.findMany({
-      where: {
-        userId,
-        ...(childId ? { childId } : {}),
-      },
-      orderBy: {
-        requestTimestamp: 'desc',
-      },
-      take: limit,
-      select: {
-        id: true,
-        userMessage: true,
-        aiResponse: true,
-        requestTimestamp: true,
-      },
-    });
+    const chats = await this.chatHistoryService.getUserChats(userId, limit, 0);
+
+    return chats.map((chat) => ({
+      id: chat.id,
+      userMessage: chat.userMessage,
+      aiResponse: chat.aiResponse,
+      requestTimestamp: chat.requestTimestamp,
+    }));
   }
 
   /**
@@ -252,11 +222,12 @@ export class ChatService {
   async countByUserId(userId: number, childId: number | null) {
     this.logger.log(`统计用户 ${userId} 的聊天记录数量`);
 
-    return this.prisma.chatHistory.count({
-      where: {
-        userId,
-        ...(childId ? { childId } : {}),
-      },
-    });
+    const chats = await this.chatHistoryService.getUserChats(userId, 1000, 0);
+
+    if (childId) {
+      return chats.filter((chat) => chat.childId === childId).length;
+    }
+
+    return chats.length;
   }
 }

@@ -4,7 +4,7 @@ import { PrismaService } from 'nestjs-prisma';
 import { ContextFactory } from './factories/context.factory';
 import { AllergyChecker } from './checkers/allergy.checker';
 import { MedicalChecker } from './checkers/medical.checker';
-import { ChatService } from '../chat/chat.service';
+import { ChatHistoryService } from '../common/services/chat-history.service';
 import { BaseMessage } from '@langchain/core/messages';
 
 /**
@@ -28,7 +28,7 @@ export class AIService {
     private readonly contextFactory: ContextFactory,
     private readonly allergyChecker: AllergyChecker,
     private readonly medicalChecker: MedicalChecker,
-    private readonly chatService: ChatService,
+    private readonly chatHistoryService: ChatHistoryService,
   ) {}
 
   /**
@@ -46,7 +46,7 @@ export class AIService {
         await this.generateAnswer(userId, childId, message);
 
       // 2. 保存聊天历史
-      await this.chatService.createChatHistory(
+      const chatHistory = await this.chatHistoryService.createChatHistory(
         userId,
         childId,
         message,
@@ -58,6 +58,7 @@ export class AIService {
 
       // 3. 返回结果
       return {
+        id: chatHistory.id,
         response,
         safetyFlags,
       };
@@ -232,7 +233,10 @@ export class AIService {
 
     try {
       // 1. 检查是否为新用户
-      const chatCount = await this.chatService.countByUserId(userId, childId);
+      const chats = await this.chatHistoryService.getUserChats(userId, 1000, 0);
+      const chatCount = childId
+        ? chats.filter((chat) => chat.childId === childId).length
+        : chats.length;
       const isNewUser = chatCount === 0;
 
       if (isNewUser) {

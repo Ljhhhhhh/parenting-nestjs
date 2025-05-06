@@ -4,7 +4,7 @@ import { AIController } from './ai.controller';
 import { LangchainModule } from '../langchain/langchain.module';
 import { ChildrenModule } from '../children/children.module';
 import { RecordsModule } from '../records/records.module';
-import { ChatModule } from '../chat/chat.module';
+import { CommonModule } from '../common/common.module';
 import { PrismaModule } from 'nestjs-prisma';
 import { ContextFactory } from './factories/context.factory';
 import { AllergyChecker } from './checkers/allergy.checker';
@@ -21,7 +21,7 @@ import { MedicalChecker } from './checkers/medical.checker';
     PrismaModule, // 导入Prisma模块以访问数据库
     ChildrenModule, // 导入Children模块以访问儿童服务
     RecordsModule, // 导入Records模块以访问记录服务
-    ChatModule, // 导入Chat模块以访问聊天服务
+    CommonModule, // 导入Common模块以访问ChatHistoryService
   ],
   controllers: [AIController],
   providers: [AIService, ContextFactory, AllergyChecker, MedicalChecker],

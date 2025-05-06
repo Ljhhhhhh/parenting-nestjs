@@ -79,7 +79,7 @@ model ChatHistory {
   userMessage     String    @map("user_message") @db.Text // TEXT NOT NULL
   aiResponse      String?   @map("ai_response") @db.Text // TEXT, 最终返回给用户的响应
   rawAiResponse   String?   @map("raw_ai_response") @db.Text // TEXT, 存储原始AI响应
-  contextSummary  String[]  @map("context_summary") @db.Text // TEXT, 本次交互使用的上下文信息摘要
+  contextSummary  String[]  @map("context_summary") // 本次交互使用的上下文信息摘要，存储为字符串数组
   safetyFlags     String?   @map("safety_flags") @db.VarChar(255) // VARCHAR(255), 记录触发的安全规则
   feedback        Int?      // SMALLINT CHECK (feedback IN (1, -1)), 用户反馈, CHECK约束建议应用层验证
   requestTimestamp DateTime @default(now()) @map("request_timestamp") @db.Timestamptz(6) // TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL

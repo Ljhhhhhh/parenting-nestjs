@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChildrenService } from '../../children/children.service';
 import { RecordsService } from '../../records/records.service';
-import { ChatService } from '../../chat/chat.service';
+import { ChatHistoryService } from '../../common/services/chat-history.service';
 
 /**
  * 上下文工厂
@@ -19,7 +19,7 @@ export class ContextFactory {
   constructor(
     private readonly childrenService: ChildrenService,
     private readonly recordsService: RecordsService,
-    private readonly chatService: ChatService,
+    private readonly chatHistoryService: ChatHistoryService,
   ) {}
 
   /**
@@ -80,14 +80,18 @@ export class ContextFactory {
 
     // 获取最近的聊天历史
     try {
-      const chatHistory = await this.chatService.getChatHistory(
+      const chatHistory = await this.chatHistoryService.getUserChats(
         userId,
-        childId,
-        5, // 最近5条聊天记录
-        0, // 偏移量为0
+        5,
+        0,
       );
 
-      context.chatHistory = chatHistory.map((chat) => ({
+      // 如果有childId，过滤出相关的聊天记录
+      const filteredChatHistory = childId
+        ? chatHistory.filter((chat) => chat.childId === childId)
+        : chatHistory;
+
+      context.chatHistory = filteredChatHistory.map((chat) => ({
         userMessage: chat.userMessage,
         aiResponse: chat.aiResponse,
         createdAt: chat.requestTimestamp.toISOString(),

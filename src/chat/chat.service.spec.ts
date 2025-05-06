@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ChatService } from './chat.service';
 import { PrismaService } from 'nestjs-prisma';
 import { AIService } from '../ai/ai.service';
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 
 describe('ChatService', () => {
   let service: ChatService;
