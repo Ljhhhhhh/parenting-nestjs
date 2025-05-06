@@ -73,7 +73,7 @@ export class ChatService {
     );
 
     return chats.map((chat) => ({
-      id: chat.id,
+      id: chat.id.toString(),
       userMessage: chat.userMessage,
       aiResponse: chat.aiResponse,
       safetyFlags: chat.safetyFlags,
@@ -108,7 +108,7 @@ export class ChatService {
     );
 
     return chats.map((chat) => ({
-      id: chat.id,
+      id: chat.id.toString(),
       userMessage: chat.userMessage,
       aiResponse: chat.aiResponse,
       safetyFlags: chat.safetyFlags,
@@ -193,6 +193,19 @@ export class ChatService {
       );
       throw error;
     }
+  }
+
+  /**
+   * 处理流式聊天请求
+   * @param userId 用户ID
+   * @param childId 可选的孩子ID
+   * @param message 用户消息
+   * @returns 流式响应的Observable
+   */
+  chatStream(userId: number, childId: number | null, message: string) {
+    this.logger.log(`处理用户 ${userId} 的流式聊天请求，消息: "${message}"`);
+
+    return this.aiService.chatStream(userId, childId, message);
   }
 
   /**

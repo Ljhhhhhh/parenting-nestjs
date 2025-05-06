@@ -277,27 +277,202 @@ export class SiliconFlowChat extends BaseChatModel {
   }
 
   /**
+   * 从数据块中提取文本内容
+   * 处理各种可能的格式
+   */
+  private extractContent(chunk: any): string | null {
+    try {
+      // 如果是字符串，尝试解析为JSON
+      if (typeof chunk === 'string') {
+        try {
+          const parsed = JSON.parse(chunk);
+          return this.extractContentFromJson(parsed);
+        } catch (e) {
+          // 如果不是有效的JSON，直接返回文本内容
+          // 但需要过滤掉一些特殊情况
+          if (chunk === '[DONE]') return null;
+
+          // 移除可能的前缀
+          let content = chunk;
+          ['data:', '~'].forEach((prefix) => {
+            if (content.startsWith(prefix)) {
+              content = content.substring(prefix.length).trim();
+            }
+          });
+
+          // 如果看起来像JSON但解析失败，返回空
+          if (content.includes('{') && content.includes('}')) return null;
+
+          return content || null;
+        }
+      }
+
+      // 如果已经是对象，直接尝试提取
+      if (typeof chunk === 'object' && chunk !== null) {
+        return this.extractContentFromJson(chunk);
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.debug(`提取内容失败: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * 从JSON对象中提取文本内容
+   */
+  private extractContentFromJson(json: any): string | null {
+    // 检查是否有错误
+    if (this._isErrorResponse(json)) {
+      throw new Error(`硅基流动 API 返回错误: ${json.error.message}`);
+    }
+
+    // 处理不同的JSON结构
+    if (json.choices && json.choices.length > 0) {
+      const choice = json.choices[0];
+
+      // 尝试从不同位置获取内容
+      if (choice.delta?.content !== undefined) {
+        return choice.delta.content;
+      } else if (choice.text !== undefined) {
+        return choice.text;
+      } else if (choice.message?.content !== undefined) {
+        return choice.message.content;
+      } else if (choice.content !== undefined) {
+        return choice.content;
+      }
+    }
+
+    // 如果是纯文本内容
+    if (typeof json === 'string') {
+      return json;
+    }
+
+    return null;
+  }
+
+  /**
    * 流式调用硅基流动 API
-   *
-   * 注意：当前版本不支持流式响应，将在未来版本实现
-   * 如需流式响应，请考虑使用其他模型或等待更新
    */
   async *_streamResponseChunks(
     messages: BaseMessage[],
     options: this['ParsedCallOptions'],
     runManager?: CallbackManagerForLLMRun,
   ): AsyncGenerator<ChatGenerationChunk> {
-    this.logger.warn('流式响应功能尚未实现，将回退到标准响应');
+    const messageList = this._convertMessagesToSiliconFlowFormat(messages);
 
-    // 回退到标准响应
-    const result = await this._generate(messages, options, runManager);
-    const generation = result.generations[0];
+    const params = {
+      model: this.modelName,
+      messages: messageList,
+      temperature: this.temperature,
+      stream: true, // 开启流式响应
+      ...(this.maxTokens && { max_tokens: this.maxTokens }),
+    };
 
-    // 返回单个块
-    yield new ChatGenerationChunk({
-      text: generation.text,
-      message: new AIMessageChunk({ content: generation.text }),
-      generationInfo: generation.generationInfo,
-    });
+    try {
+      // 创建一个带流式响应的请求
+      const response = await this.client.post('/chat/completions', params, {
+        responseType: 'stream',
+      });
+
+      // 获取数据流
+      const stream = response.data;
+
+      // 用于跟踪完整文本的变量
+      let accumulatedText = '';
+
+      // 处理数据流
+      for await (const chunk of stream) {
+        // 将数据块转换为字符串
+        const chunkString = chunk.toString();
+
+        // 如果是空数据，则跳过
+        if (!chunkString.trim()) {
+          continue;
+        }
+
+        // 处理可能的SSE格式数据
+        const lines = chunkString.split('\n');
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine) continue;
+
+          // 提取数据部分
+          let dataContent = trimmedLine;
+          if (trimmedLine.startsWith('data:')) {
+            dataContent = trimmedLine.substring(5).trim();
+          }
+
+          // 如果是结束标记，跳过
+          if (dataContent === '[DONE]') continue;
+
+          // 提取内容
+          let content: string | null = null;
+
+          try {
+            // 尝试解析JSON
+            content = this.extractContent(dataContent);
+          } catch (error) {
+            // 解析失败，尝试直接使用文本
+            this.logger.debug(`JSON解析失败: ${error.message}`);
+
+            // 如果看起来不像JSON，可能是纯文本
+            if (!dataContent.includes('{') && !dataContent.includes('}')) {
+              content = dataContent;
+            }
+          }
+
+          // 如果成功提取到内容
+          if (content) {
+            // 更新累计文本
+            accumulatedText += content;
+
+            // 通知回调管理器
+            await runManager?.handleLLMNewToken(content);
+
+            // 生成并返回块
+            yield new ChatGenerationChunk({
+              text: content,
+              message: new AIMessageChunk({ content }),
+              generationInfo: {},
+            });
+          }
+        }
+      }
+
+      // 如果没有生成任何内容，返回一个空块
+      if (!accumulatedText) {
+        this.logger.warn('流式响应未生成任何内容，回退到非流式调用');
+
+        // 回退到非流式调用
+        const result = await this._generate(messages, options, runManager);
+        const generation = result.generations[0];
+
+        yield new ChatGenerationChunk({
+          text: generation.text,
+          message: new AIMessageChunk({ content: generation.text }),
+          generationInfo: generation.generationInfo,
+        });
+      }
+    } catch (error) {
+      this.logger.error(`流式调用失败: ${error.message}`);
+
+      // 尝试回退到非流式调用
+      try {
+        this.logger.warn('流式调用失败，回退到标准响应');
+        const result = await this._generate(messages, options, runManager);
+        const generation = result.generations[0];
+
+        yield new ChatGenerationChunk({
+          text: generation.text,
+          message: new AIMessageChunk({ content: generation.text }),
+          generationInfo: generation.generationInfo,
+        });
+      } catch (fallbackError) {
+        // 如果回退也失败，抛出原始错误
+        throw error;
+      }
+    }
   }
 }

@@ -6,6 +6,8 @@ import { AllergyChecker } from './checkers/allergy.checker';
 import { MedicalChecker } from './checkers/medical.checker';
 import { ChatHistoryService } from '../common/services/chat-history.service';
 import { BaseMessage } from '@langchain/core/messages';
+import { Observable, Subject, firstValueFrom } from 'rxjs';
+import { map, tap } from 'rxjs/operators';
 
 /**
  * AI服务
@@ -66,6 +68,124 @@ export class AIService {
       this.logger.error(`处理聊天请求失败: ${error.message}`);
       throw new Error(`处理聊天请求失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 处理流式聊天请求
+   * @param userId 用户ID
+   * @param childId 可选的孩子ID
+   * @param message 用户消息
+   * @returns 流式响应的Observable
+   */
+  chatStream(
+    userId: number,
+    childId: number | null,
+    message: string,
+  ): Observable<{
+    type: 'content' | 'done' | 'error';
+    content?: string;
+    chatId?: bigint;
+    safetyFlags?: string[];
+    error?: string;
+  }> {
+    this.logger.log(`处理用户 ${userId} 的流式聊天请求`);
+
+    const subject = new Subject<{
+      type: 'content' | 'done' | 'error';
+      content?: string;
+      chatId?: bigint;
+      safetyFlags?: string[];
+      error?: string;
+    }>();
+
+    // 1. 构建上下文和消息
+    this.contextFactory
+      .buildContext(userId, childId)
+      .then((context) => {
+        const contextSummary = this.generateContextSummary(context);
+        const messages = this.buildChatMessages(context, message);
+
+        // 2. 收集完整响应以便后续处理
+        let fullResponse = '';
+
+        // 3. 调用LangChain流式生成
+        this.langchainService
+          .generateResponseStream(messages)
+          .pipe(
+            tap((chunk) => {
+              // 发送内容片段
+              subject.next({ type: 'content', content: chunk });
+              // 收集完整响应
+              fullResponse += chunk;
+            }),
+          )
+          .subscribe({
+            complete: async () => {
+              try {
+                // 4. 执行安全检查
+                const { response, safetyFlags } =
+                  await this.performSafetyChecks(
+                    fullResponse,
+                    context.child?.allergyInfo || [],
+                  );
+
+                // 5. 如果有孩子信息，添加月龄特定的指导
+                let finalResponse = response;
+                if (context.child) {
+                  finalResponse = this.getAgeSpecificGuidance(
+                    finalResponse,
+                    context.child.ageInMonths,
+                  );
+                }
+
+                // 6. 保存聊天历史
+                const chatHistory =
+                  await this.chatHistoryService.createChatHistory(
+                    userId,
+                    childId,
+                    message,
+                    finalResponse,
+                    fullResponse,
+                    contextSummary,
+                    safetyFlags.join(','),
+                  );
+
+                // 7. 发送完成信号
+                subject.next({
+                  type: 'done',
+                  chatId: chatHistory.id,
+                  safetyFlags,
+                });
+                subject.complete();
+              } catch (error) {
+                this.logger.error(`处理流式聊天请求失败: ${error.message}`);
+                subject.next({
+                  type: 'error',
+                  error: `处理流式聊天请求失败: ${error.message}`,
+                });
+                subject.complete();
+              }
+            },
+            error: (error) => {
+              this.logger.error(`流式生成回复失败: ${error.message}`);
+              subject.next({
+                type: 'error',
+                error: `流式生成回复失败: ${error.message}`,
+              });
+              subject.complete();
+            },
+          });
+      })
+      .catch((error) => {
+        this.logger.error(`构建上下文失败: ${error.message}`);
+        subject.next({
+          type: 'error',
+          error: `构建上下文失败: ${error.message}`,
+        });
+        subject.complete();
+      });
+
+    return subject.asObservable();
   }
 
   private async generateAnswer(

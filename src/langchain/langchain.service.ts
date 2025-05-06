@@ -7,6 +7,7 @@ import {
   SystemMessage,
 } from '@langchain/core/messages';
 import { SiliconFlowChat } from './models/silicon-flow.chat';
+import { Observable } from 'rxjs';
 
 /**
  * LangchainService
@@ -49,6 +50,35 @@ export class LangchainService implements OnModuleInit {
       this.logger.error(`生成回复失败: ${error.message}`);
       throw new Error(`生成回复失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 流式生成AI回复
+   * @param messages 消息列表
+   * @returns 生成的回复文本流
+   */
+  generateResponseStream(messages: BaseMessage[]): Observable<string> {
+    return new Observable<string>((subscriber) => {
+      this.model
+        .stream(messages)
+        .then(async (stream) => {
+          try {
+            for await (const chunk of stream) {
+              if (chunk.content) {
+                subscriber.next(chunk.content.toString());
+              }
+            }
+            subscriber.complete();
+          } catch (error) {
+            this.logger.error(`流式生成回复失败: ${error.message}`);
+            subscriber.error(new Error(`流式生成回复失败: ${error.message}`));
+          }
+        })
+        .catch((error) => {
+          this.logger.error(`初始化流式生成失败: ${error.message}`);
+          subscriber.error(new Error(`初始化流式生成失败: ${error.message}`));
+        });
+    });
   }
 
   /**
