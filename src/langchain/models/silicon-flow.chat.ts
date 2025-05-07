@@ -65,47 +65,78 @@ export class SiliconFlowChat extends BaseChatModel {
   ) {
     super(fields ?? {});
 
-    // 优先使用注入的配置服务
-    if (this.configService) {
-      this.apiKey =
-        fields?.apiKey ?? this.configService.get<string>('siliconFlow.apiKey');
-      this.apiEndpoint =
-        fields?.apiEndpoint ??
-        this.configService.get<string>('siliconFlow.apiEndpoint') ??
-        'https://api.siliconflow.com/v1';
-      this.modelName =
-        fields?.modelName ??
-        this.configService.get<string>('siliconFlow.model') ??
-        'silicon-flow-plus';
-      this.temperature =
-        fields?.temperature ??
-        this.configService.get<number>('siliconFlow.temperature') ??
-        0.7;
-      this.maxTokens =
-        fields?.maxTokens ??
-        this.configService.get<number>('siliconFlow.maxTokens');
-      this.timeout =
-        fields?.timeout ??
-        this.configService.get<number>('siliconFlow.timeout') ??
-        30000;
-      this.maxRetries =
-        fields?.maxRetries ??
-        this.configService.get<number>('siliconFlow.maxRetries') ??
-        3;
-    } else {
-      // 回退到环境变量或默认值
-      this.apiKey =
-        fields?.apiKey ?? getEnvironmentVariable('SILICON_FLOW_API_KEY');
-      this.apiEndpoint =
-        fields?.apiEndpoint ??
-        getEnvironmentVariable('SILICON_FLOW_API_ENDPOINT') ??
-        'https://api.siliconflow.com/v1';
-      this.modelName = fields?.modelName ?? 'silicon-flow-plus';
-      this.temperature = fields?.temperature ?? 0.7;
-      this.maxTokens = fields?.maxTokens;
-      this.timeout = fields?.timeout ?? 30000;
-      this.maxRetries = fields?.maxRetries ?? 3;
-    }
+    // 初始化配置，按优先级获取：传入参数 > 配置服务 > 环境变量 > 默认值
+    this.initializeConfig(fields);
+  }
+
+  /**
+   * 初始化配置参数
+   * 按照优先级获取：传入参数 > 配置服务 > 环境变量 > 默认值
+   */
+  private initializeConfig(fields?: SiliconFlowChatInput): void {
+    // 获取配置值的辅助函数
+    const getConfigValue = <T>(
+      fieldValue: T | undefined,
+      configKey: string,
+      envVar: string | null,
+      defaultValue?: T,
+    ): T | undefined => {
+      return (
+        fieldValue ??
+        (this.configService ? this.configService.get<T>(configKey) : null) ??
+        (envVar ? (process.env[envVar] as unknown as T) : null) ??
+        (envVar ? (getEnvironmentVariable(envVar) as unknown as T) : null) ??
+        defaultValue
+      );
+    };
+
+    // 应用配置
+    this.apiKey = getConfigValue<string>(
+      fields?.apiKey,
+      'siliconFlow.apiKey',
+      'SILICON_FLOW_API_KEY',
+    );
+
+    this.apiEndpoint = getConfigValue<string>(
+      fields?.apiEndpoint,
+      'siliconFlow.apiEndpoint',
+      'SILICON_FLOW_API_ENDPOINT',
+      'https://api.siliconflow.com/v1',
+    );
+
+    this.modelName = getConfigValue<string>(
+      fields?.modelName,
+      'siliconFlow.model',
+      null,
+      'silicon-flow-plus',
+    );
+
+    this.temperature = getConfigValue<number>(
+      fields?.temperature,
+      'siliconFlow.temperature',
+      null,
+      0.7,
+    );
+
+    this.maxTokens = getConfigValue<number>(
+      fields?.maxTokens,
+      'siliconFlow.maxTokens',
+      null,
+    );
+
+    this.timeout = getConfigValue<number>(
+      fields?.timeout,
+      'siliconFlow.timeout',
+      null,
+      30000,
+    );
+
+    this.maxRetries = getConfigValue<number>(
+      fields?.maxRetries,
+      'siliconFlow.maxRetries',
+      null,
+      3,
+    );
 
     if (!this.apiKey) {
       this.logger.error(

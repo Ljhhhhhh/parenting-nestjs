@@ -4,6 +4,8 @@ import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { PrismaClientExceptionFilter } from 'nestjs-prisma';
 import { Logger } from 'nestjs-pino';
+import * as dotenv from 'dotenv';
+import * as dotenvExpand from 'dotenv-expand';
 import { AppModule } from './app.module';
 import type {
   CorsConfig,
@@ -13,6 +15,9 @@ import type {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+  const myEnv = dotenv.config();
+  dotenvExpand.expand(myEnv);
 
   // Use pino logger
   app.useLogger(app.get(Logger));
@@ -48,6 +53,8 @@ async function bootstrap() {
   if (corsConfig.enabled) {
     app.enableCors();
   }
+
+  console.log(process.env.SILICON_FLOW_API_KEY, 'process.env.PORT');
 
   await app.listen(process.env.PORT || nestConfig.port || 3010);
   app.get(Logger).log(`Application is running on: ${await app.getUrl()}`);

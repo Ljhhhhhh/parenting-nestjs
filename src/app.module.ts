@@ -22,7 +22,11 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [config] }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      expandVariables: true,
+      load: [config],
+    }),
     CacheModule,
     LoggerModule,
     PrismaModule.forRoot({
