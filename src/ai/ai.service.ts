@@ -105,6 +105,9 @@ export class AIService {
         const contextSummary = this.generateContextSummary(context);
         const messages = this.buildChatMessages(context, message);
 
+        this.logger.log(`上下文: ${JSON.stringify(context)}`);
+        this.logger.log(`消息: ${JSON.stringify(messages)}`);
+
         // 2. 收集完整响应以便后续处理
         let fullResponse = '';
 

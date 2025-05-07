@@ -10,9 +10,11 @@ import {
   Post,
   ParseIntPipe,
   Res,
+  Sse,
   HttpStatus,
   StreamableFile,
 } from '@nestjs/common';
+import { map, catchError, of } from 'rxjs';
 import { Response } from 'express';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -129,8 +131,50 @@ export class ChatController {
   /**
    * 发送聊天消息并获取AI回复
    */
-  @Post()
+  @Sse('stream')
   @ApiOperation({ summary: '发送聊天消息并以SSE方式获取AI回复' })
+  @ApiResponse({
+    status: 200,
+    description: '聊天成功',
+    type: ChatStreamResponseDto,
+  })
+  chatStream(
+    @Request() req,
+    @Query('message') message: string,
+    @Query('childId') childId?: string,
+  ) {
+    const userId = req.user.id;
+    // 将childId转换为数字或null
+    const childIdNum = childId ? parseInt(childId, 10) : null;
+
+    // 获取流式响应
+    const chatStream = this.chatService.chatStream(userId, childIdNum, message);
+
+    // 将Observable转换为适合SSE的格式
+    // 处理BigInt序列化问题
+    return chatStream.pipe(
+      map((data) => ({
+        // 使用自定义replacer函数处理BigInt
+        data: JSON.parse(
+          JSON.stringify(data, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value,
+          ),
+        ),
+      })),
+      catchError((error) => {
+        // 处理错误
+        return of({
+          data: {
+            type: 'error',
+            error: error.message,
+          },
+        });
+      }),
+    );
+  }
+
+  @Post()
+  @ApiOperation({ summary: '发送聊天消息并以SSE方式获取AI回复（兼容旧版本）' })
   @ApiResponse({
     status: 200,
     description: '聊天成功',
@@ -141,58 +185,13 @@ export class ChatController {
     @Body() chatRequestDto: ChatRequestDto,
     @Res() res: Response,
   ) {
-    const userId = req.user.id;
-    const { message, childId } = chatRequestDto;
-
-    // 设置SSE头部
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // 防止Nginx缓冲
-    res.flushHeaders(); // 立即发送头部
-
-    // 获取流式响应
-    const chatStream = this.chatService.chatStream(
-      userId,
-      childId || null,
-      message,
+    // 重定向到新的SSE端点
+    return res.redirect(
+      307,
+      `/chat/stream?message=${encodeURIComponent(chatRequestDto.message)}${
+        chatRequestDto.childId ? `&childId=${chatRequestDto.childId}` : ''
+      }`,
     );
-
-    // 订阅流式响应
-    const subscription = chatStream.subscribe({
-      next: (data) => {
-        // 处理 BigInt 类型的序列化问题
-        const serializedData = JSON.stringify(data, (key, value) =>
-          typeof value === 'bigint' ? value.toString() : value,
-        );
-
-        // 将数据格式化为SSE格式并发送
-        res.write(`data: ${serializedData}\n\n`);
-      },
-      error: (error) => {
-        // 发送错误信息
-        const serializedError = JSON.stringify(
-          {
-            type: 'error',
-            error: error.message,
-          },
-          (key, value) =>
-            typeof value === 'bigint' ? value.toString() : value,
-        );
-
-        res.write(`data: ${serializedError}\n\n`);
-        res.end();
-      },
-      complete: () => {
-        // 完成时关闭连接
-        res.end();
-      },
-    });
-
-    // 当客户端断开连接时取消订阅
-    req.on('close', () => {
-      subscription.unsubscribe();
-    });
   }
 
   /**
