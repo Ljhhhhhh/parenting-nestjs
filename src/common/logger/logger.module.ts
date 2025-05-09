@@ -14,7 +14,7 @@ import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
         return {
           pinoHttp: {
             level: configService.get<string>('LOG_LEVEL', 'info'),
-            // Only enable pino-pretty transport in development environments
+            // 解决中文乱码问题
             transport: !isProduction
               ? {
                   target: 'pino-pretty',
@@ -23,6 +23,8 @@ import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
                   },
                 }
               : undefined,
+            // 确保正确处理 UTF-8 编码
+            charset: 'utf8',
           },
         };
       },
