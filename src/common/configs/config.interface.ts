@@ -5,6 +5,7 @@ export interface Config {
   graphql: GraphqlConfig;
   security: SecurityConfig;
   siliconFlow: SiliconFlowConfig;
+  embedding: EmbeddingConfig;
 }
 
 export interface NestConfig {
@@ -44,5 +45,14 @@ export interface SiliconFlowConfig {
   model: string;
   temperature: number;
   maxTokens?: number;
+  timeout?: number;
+}
+
+export interface EmbeddingConfig {
+  provider: string;
+  dimensions: number;
+  embeddingModel: string;
+  batchSize: number;
+  maxRetries: number;
   timeout?: number;
 }

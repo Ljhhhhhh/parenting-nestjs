@@ -40,7 +40,16 @@ const config: Config = {
     model: 'deepseek-ai/DeepSeek-V3',
     temperature: 0.7,
     maxTokens: 2048,
-    timeout: 60000, // 30秒
+    timeout: 60000, // 60秒
+  },
+  embedding: {
+    // --- 嵌入服务配置 ---
+    provider: process.env.EMBEDDING_PROVIDER || 'silicon_flow', // 'silicon_flow' 或 'openai'
+    dimensions: parseInt(process.env.EMBEDDING_DIMENSIONS || '1536'), // 嵌入向量维度
+    embeddingModel: process.env.EMBEDDING_MODEL || 'silicon-flow-embedding', // 嵌入模型名称
+    batchSize: parseInt(process.env.EMBEDDING_BATCH_SIZE || '10'), // 批处理大小
+    maxRetries: parseInt(process.env.EMBEDDING_MAX_RETRIES || '3'), // 最大重试次数
+    timeout: parseInt(process.env.EMBEDDING_TIMEOUT || '30000'), // 30秒
   },
 };
 

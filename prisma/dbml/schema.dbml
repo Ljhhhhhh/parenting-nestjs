@@ -26,6 +26,7 @@ Table children {
   user users [not null]
   records records [not null]
   chatHistory chat_history [not null]
+  textChunks text_chunks [not null]
 }
 
 Table records {
@@ -54,6 +55,18 @@ Table chat_history {
   child children
 }
 
+Table text_chunks {
+  id BigInt [pk, increment]
+  content String [not null]
+  sourceType String [not null]
+  sourceId Int [not null]
+  childId Int [not null]
+  metadata Json [not null, default: '{}']
+  createdAt DateTime [default: `now()`, not null]
+  updatedAt DateTime [default: `now()`, not null]
+  child children [not null]
+}
+
 Ref: children.userId > users.id [delete: Cascade]
 
 Ref: records.childId > children.id [delete: Cascade]
@@ -61,3 +74,5 @@ Ref: records.childId > children.id [delete: Cascade]
 Ref: chat_history.userId > users.id
 
 Ref: chat_history.childId > children.id
+
+Ref: text_chunks.childId > children.id [delete: Cascade]

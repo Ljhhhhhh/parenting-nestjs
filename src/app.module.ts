@@ -17,6 +17,9 @@ import { RecordsModule } from './records/records.module';
 import { AIModule } from './ai/ai.module';
 import { ChatModule } from './chat/chat.module';
 import { LangchainModule } from './langchain/langchain.module';
+import { EmbeddingModule } from './embedding/embedding.module';
+import { VectorModule } from './vector/vector.module';
+import { PreprocessingModule } from './preprocessing/preprocessing.module';
 import { APP_PIPE, APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 
@@ -52,6 +55,9 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     LangchainModule,
     AIModule,
     ChatModule,
+    EmbeddingModule,
+    VectorModule,
+    PreprocessingModule,
   ],
   controllers: [AppController],
   providers: [
